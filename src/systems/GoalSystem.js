@@ -60,6 +60,7 @@ export class GoalSystem {
       moneyEarned: 0,
       customersServed: 0,
       fiveStars: 0,
+      totalStars: 0,
       streamersServed: 0,
       angryLeaves: 0,
     };
@@ -83,6 +84,7 @@ export class GoalSystem {
 
   onCustomerServed(stars, isStreamer = false) {
     this.stats.customersServed++;
+    this.stats.totalStars += stars;
     if (stars === 5) this.stats.fiveStars++;
     if (isStreamer) this.stats.streamersServed++;
     this._checkGoals();
