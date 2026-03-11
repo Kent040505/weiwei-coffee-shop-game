@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>微微咖啡馆 ☕ — Weiwei Coffee Shop</title>
+  <style>
+    /* Reset */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #FFF8F0;   /* warm cream */
+      overflow: hidden;
+      font-family: 'Comic Sans MS', 'Chalkboard SE', cursive;
+    }
+
+    /* Full-window canvas */
+    #gameCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: pointer;
+    }
+
+    /* Loading overlay — hidden once the game starts */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #FFF8F0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 999;
+    }
+    #loading h1 {
+      font-size: 2.4rem;
+      color: #8B4513;
+    }
+    #loading p {
+      font-size: 1rem;
+      color: #A0724A;
+    }
+    #loading.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading">
+    <h1>微微咖啡馆 ☕</h1>
+    <p>Loading… 正在加载中…</p>
+  </div>
+
+  <!-- Game canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Entry point — all modules loaded transitively from Game.js -->
+  <script type="module" src="src/core/Game.js"></script>
+
+  <!-- Hide loading screen once the module finishes loading -->
+  <script type="module">
+    // The Game module sets up DOMContentLoaded; hide loader after a brief tick
+    // so the canvas is ready before we reveal it.
+    window.addEventListener('load', () => {
+      requestAnimationFrame(() => {
+        const loader = document.getElementById('loading');
+        if (loader) loader.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>
