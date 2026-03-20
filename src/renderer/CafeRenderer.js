@@ -1,33 +1,34 @@
 /**
- * CafeRenderer.js — Top-Down Isometric Cafe View
+ * CafeRenderer.js — Top-Down Tile-Based Cafe View (Stardew-like)
  *
- * Draws the cafe interior with:
- *   - Cream sky/background area with heart wallpaper
- *   - Straight flat rectangular back walls (left side + right side)
- *   - 7×7 orange isometric tile floor grid (diamond/rhombus shape)
- *   - Wall features: entrance door (left), coffee counter (right), windows
+ * Draws the cafe interior from a top-down orthographic perspective:
+ *   - Warm cream background (outside/street area)
+ *   - Back wall (top strip) with heart wallpaper, windows, coffee counter
+ *   - Left/right side walls with door on the left (customer entrance)
+ *   - Square tile floor grid (warm wood tones, checkerboard pattern)
  *   - Corner plants on the floor
  *   - Optional sky-tint overlay (dusk/night effect)
  *
- * Room geometry (all responsive to canvas W × H):
- *   isoOriginX(W) = W * 0.50  — horizontal centre / back apex of floor
- *   isoOriginY(H) = H * 0.36  — top edge of floor / bottom of back walls
- *   wallH         = H * 0.18  — height of flat rectangular back walls
- *   tileW         = min(W*0.14, H*0.12)   — iso tile width
- *   tileH         = tileW * 0.5           — iso tile height
+ * Floor geometry (all responsive to canvas W × H):
+ *   floorLeft(W)   = W * 0.03   — left edge of playable floor
+ *   floorTop(H)    = H * 0.28   — top edge of floor / bottom of back wall
+ *   floorRight(W)  = W * 0.97   — right edge of playable floor
+ *   floorBottom(H) = H * 0.90   — bottom edge of floor / entrance threshold
  *
- * Exported helpers (used elsewhere):
- *   isoOriginX(W)
- *   isoOriginY(H)
+ * Exported helpers:
+ *   floorLeft(W), floorTop(H), floorRight(W), floorBottom(H)
  */
 
 import { roundRect as _roundRect } from '../utils/drawUtils.js';
 
-/** Screen X of the isometric floor back-apex (world origin). */
-export function isoOriginX(W) { return W * 0.50; }
-
-/** Screen Y of the isometric floor back-apex / bottom of back walls. */
-export function isoOriginY(H) { return H * 0.36; }
+/** Left edge of the playable floor area. */
+export function floorLeft(W)   { return W * 0.03; }
+/** Top edge of the playable floor area (bottom of back wall). */
+export function floorTop(H)    { return H * 0.28; }
+/** Right edge of the playable floor area. */
+export function floorRight(W)  { return W * 0.97; }
+/** Bottom edge of the playable floor area. */
+export function floorBottom(H) { return H * 0.90; }
 
 export class CafeRenderer {
   constructor(w, h) {
@@ -39,31 +40,41 @@ export class CafeRenderer {
     const W = this.w;
     const H = this.h;
 
-    const originX = isoOriginX(W);
-    const originY = isoOriginY(H);
-    const wallH   = H * 0.18;
+    const fL = floorLeft(W);
+    const fT = floorTop(H);
+    const fR = floorRight(W);
+    const fB = floorBottom(H);
+    const fW = fR - fL;
+    const fH = fB - fT;
 
-    // Tile size — capped so the floor fits on screen in both orientations
-    const tileW = Math.min(W * 0.14, H * 0.12);
-    const tileH = tileW * 0.5;
+    // Wall thickness for left/right side walls
+    const sideWallW = Math.max(6, W * 0.018);
+    // Back wall height (strip above floor)
+    const backWallH = fT - H * 0.06;
 
-    // ── A. Sky / background ───────────────────────────────────────────────────
-    this._drawSky(ctx, W, H, originY);
+    // ── A. Background (outside/street area) ───────────────────────────────────
+    this._drawBackground(ctx, W, H, fT);
 
-    // ── B. Flat rectangular back walls ────────────────────────────────────────
-    this._drawLeftWall(ctx, W, H, originX, originY, wallH);
-    this._drawRightWall(ctx, W, H, originX, originY, wallH);
+    // ── B. Back wall ──────────────────────────────────────────────────────────
+    this._drawBackWall(ctx, W, H, fL, fT, fR, backWallH);
 
-    // ── C. Orange isometric tile floor ────────────────────────────────────────
-    this._drawFloor(ctx, originX, originY, tileW, tileH);
+    // ── C. Square tile floor ──────────────────────────────────────────────────
+    this._drawFloor(ctx, fL, fT, fW, fH);
 
-    // ── D. Wall & floor features ──────────────────────────────────────────────
-    this._drawDoor(ctx, W, H, originX, originY, wallH);
-    this._drawCounter(ctx, W, H, originX, originY, wallH);
-    this._drawWindows(ctx, W, H, originX, originY, wallH);
-    this._drawPlants(ctx, H, originX, originY, tileW, tileH);
+    // ── D. Side walls (drawn over floor edges) ────────────────────────────────
+    this._drawSideWalls(ctx, W, H, fL, fT, fR, fB, sideWallW);
 
-    // ── E. Sky tint overlay ───────────────────────────────────────────────────
+    // ── E. Door on left wall (customer entrance) ──────────────────────────────
+    this._drawDoor(ctx, W, H, fL, fT, fB, sideWallW);
+
+    // ── F. Counter and windows on back wall ───────────────────────────────────
+    this._drawCounter(ctx, W, H, fL, fT, fR, backWallH);
+    this._drawWindows(ctx, W, H, fL, fT, fR, backWallH);
+
+    // ── G. Corner plants on the floor ─────────────────────────────────────────
+    this._drawPlants(ctx, H, fL, fR, fT, fB);
+
+    // ── H. Sky tint overlay ───────────────────────────────────────────────────
     if (skyTint) {
       ctx.save();
       ctx.fillStyle = skyTint;
@@ -72,21 +83,27 @@ export class CafeRenderer {
     }
   }
 
-  // ─── A. Sky / background ────────────────────────────────────────────────────
+  // ─── A. Background ──────────────────────────────────────────────────────────
 
-  _drawSky(ctx, W, H, originY) {
+  _drawBackground(ctx, W, H, fT) {
     ctx.save();
 
-    // Warm cream background fills the entire canvas
+    // Warm cream — outside / street area fills entire canvas as a base
     ctx.fillStyle = '#FFF0D9';
     ctx.fillRect(0, 0, W, H);
 
-    // Heart wallpaper scattered in the upper sky area (above the walls)
+    // Subtle sidewalk pattern outside (below floor bottom)
+    ctx.fillStyle = '#EEE0C8';
+    ctx.fillRect(0, H * 0.90, W, H * 0.10);
+    ctx.strokeStyle = '#D4C0A0';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(0, H * 0.90, W, H * 0.10);
+
+    // Heart wallpaper decoration above the back wall
     ctx.font      = '13px serif';
-    ctx.fillStyle = 'rgba(255,182,193,0.38)';
-    const heartBottom = originY * 0.82;
+    ctx.fillStyle = 'rgba(255,182,193,0.35)';
     for (let px = 18; px < W; px += 52) {
-      for (let py = 16; py < heartBottom; py += 36) {
+      for (let py = 16; py < fT * 0.72; py += 36) {
         ctx.fillText('♥', px, py);
       }
     }
@@ -94,241 +111,237 @@ export class CafeRenderer {
     ctx.restore();
   }
 
-  // ─── B. Back walls ──────────────────────────────────────────────────────────
+  // ─── B. Back wall (top strip) ───────────────────────────────────────────────
 
-  _drawLeftWall(ctx, W, H, originX, originY, wallH) {
+  _drawBackWall(ctx, W, H, fL, fT, fR, backWallH) {
     ctx.save();
 
-    const wallTop = originY - wallH;
+    const wallTop = fT - backWallH;
 
+    // Left half of back wall
     ctx.fillStyle = '#EDD5B0';
-    ctx.fillRect(0, wallTop, originX, wallH);
+    ctx.fillRect(fL, wallTop, (fR - fL) * 0.5, backWallH);
 
-    ctx.strokeStyle = '#B89060';
-    ctx.lineWidth   = 1;
-    ctx.strokeRect(0, wallTop, originX, wallH);
-
-    ctx.restore();
-  }
-
-  _drawRightWall(ctx, W, H, originX, originY, wallH) {
-    ctx.save();
-
-    const wallTop = originY - wallH;
-
+    // Right half (slightly different tone)
     ctx.fillStyle = '#DCC89A';
-    ctx.fillRect(originX, wallTop, W - originX, wallH);
+    ctx.fillRect(fL + (fR - fL) * 0.5, wallTop, (fR - fL) * 0.5, backWallH);
 
-    ctx.strokeStyle = '#A88040';
+    // Bottom border of back wall (separates wall from floor)
+    ctx.strokeStyle = '#B89060';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.moveTo(fL, fT);
+    ctx.lineTo(fR, fT);
+    ctx.stroke();
+
+    // Top border
+    ctx.strokeStyle = '#C8A070';
     ctx.lineWidth   = 1;
-    ctx.strokeRect(originX, wallTop, W - originX, wallH);
+    ctx.beginPath();
+    ctx.moveTo(fL, wallTop);
+    ctx.lineTo(fR, wallTop);
+    ctx.stroke();
 
     ctx.restore();
   }
 
-  // ─── C. Isometric tile floor ────────────────────────────────────────────────
+  // ─── C. Square tile floor ───────────────────────────────────────────────────
 
-  _drawFloor(ctx, originX, originY, tileW, tileH) {
-    const ROWS = 7;
-    const COLS = 7;
+  _drawFloor(ctx, fL, fT, fW, fH) {
+    // Square tile size — auto-fit to floor dimensions (10 columns target)
+    const tileSize = Math.min(fW / 10, fH / 7);
+    const cols     = Math.ceil(fW / tileSize);
+    const rows     = Math.ceil(fH / tileSize);
 
-    // Draw tiles back-to-front (row 0 = back, row 6 = front)
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        // Tile centre: top vertex of (0,0) sits exactly at (originX, originY)
-        const cx = originX + (col - row) * (tileW / 2);
-        const cy = originY + (col + row + 1) * (tileH / 2);
-        this._drawTile(ctx, cx, cy, tileW, tileH);
+    ctx.save();
+    // Clip drawing to floor rectangle
+    ctx.beginPath();
+    ctx.rect(fL, fT, fW, fH);
+    ctx.clip();
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const tx = fL + col * tileSize;
+        const ty = fT + row * tileSize;
+        this._drawTile(ctx, tx, ty, tileSize, (row + col) % 2 === 0);
       }
+    }
+
+    ctx.restore();
+  }
+
+  _drawTile(ctx, tx, ty, size, light) {
+    // Alternating warm wood tones
+    ctx.fillStyle = light ? '#F0C87A' : '#E8BC6A';
+    ctx.fillRect(tx, ty, size, size);
+
+    // Subtle grout lines
+    ctx.strokeStyle = 'rgba(100,65,20,0.22)';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(tx, ty, size, size);
+
+    // Faint wood-grain highlight on lighter tiles
+    if (light) {
+      ctx.strokeStyle = 'rgba(255,235,160,0.30)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx + size * 0.15, ty + size * 0.25);
+      ctx.lineTo(tx + size * 0.55, ty + size * 0.25);
+      ctx.stroke();
     }
   }
 
-  _drawTile(ctx, cx, cy, tileW, tileH) {
-    const hw = tileW / 2;
-    const hh = tileH / 2;
+  // ─── D. Side walls ──────────────────────────────────────────────────────────
 
-    // ── Base fill ──────────────────────────────────────────────────────────────
-    ctx.beginPath();
-    ctx.moveTo(cx,      cy - hh);   // top
-    ctx.lineTo(cx + hw, cy);        // right
-    ctx.lineTo(cx,      cy + hh);   // bottom
-    ctx.lineTo(cx - hw, cy);        // left
-    ctx.closePath();
-    ctx.fillStyle = '#F0A030';
-    ctx.fill();
-
-    // ── Top-right facet — lighter highlight ───────────────────────────────────
-    ctx.beginPath();
-    ctx.moveTo(cx,      cy - hh);
-    ctx.lineTo(cx + hw, cy);
-    ctx.lineTo(cx,      cy);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,200,80,0.35)';
-    ctx.fill();
-
-    // ── Bottom-left facet — darker shadow ─────────────────────────────────────
-    ctx.beginPath();
-    ctx.moveTo(cx,      cy + hh);
-    ctx.lineTo(cx - hw, cy);
-    ctx.lineTo(cx,      cy);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.fill();
-
-    // ── Tile border ───────────────────────────────────────────────────────────
-    ctx.beginPath();
-    ctx.moveTo(cx,      cy - hh);
-    ctx.lineTo(cx + hw, cy);
-    ctx.lineTo(cx,      cy + hh);
-    ctx.lineTo(cx - hw, cy);
-    ctx.closePath();
-    ctx.strokeStyle = 'rgba(80,40,0,0.50)';
-    ctx.lineWidth   = 1;
-    ctx.stroke();
-  }
-
-  // ─── D. Door ────────────────────────────────────────────────────────────────
-
-  _drawDoor(ctx, W, H, originX, originY, wallH) {
+  _drawSideWalls(ctx, W, H, fL, fT, fR, fB, sideWallW) {
     ctx.save();
 
-    // Door on the left wall, near the centre-left portion
-    const doorW  = Math.max(28, originX * 0.22);
-    const doorH  = wallH * 0.80;
-    const doorX  = originX * 0.30;
-    const doorY  = originY - doorH;
+    // Left side wall
+    ctx.fillStyle   = '#C8A870';
+    ctx.strokeStyle = '#8B6020';
+    ctx.lineWidth   = 1.5;
+    ctx.fillRect(fL, fT, sideWallW, fB - fT);
+    ctx.strokeRect(fL, fT, sideWallW, fB - fT);
 
-    // Door fill
+    // Right side wall
+    ctx.fillStyle   = '#BEA070';
+    ctx.strokeStyle = '#7A5818';
+    ctx.fillRect(fR - sideWallW, fT, sideWallW, fB - fT);
+    ctx.strokeRect(fR - sideWallW, fT, sideWallW, fB - fT);
+
+    ctx.restore();
+  }
+
+  // ─── E. Door (left wall entrance) ───────────────────────────────────────────
+
+  _drawDoor(ctx, W, H, fL, fT, fB, sideWallW) {
+    ctx.save();
+
+    // Door centred vertically at H * 0.54 (matching customer spawn Y)
+    const doorH  = Math.max(40, (fB - fT) * 0.22);
+    const doorCY = fT + (fB - fT) * 0.42;
+    const doorY  = doorCY - doorH / 2;
+
+    // Clear gap in the left wall
     ctx.fillStyle = '#DEB887';
-    _roundRect(ctx, doorX, doorY, doorW, doorH, 4);
-    ctx.fill();
+    ctx.fillRect(fL, doorY, sideWallW + 2, doorH);
+
+    // Door frame
     ctx.strokeStyle = '#8B6914';
-    ctx.lineWidth   = 2;
-    ctx.stroke();
+    ctx.lineWidth   = 2.5;
+    ctx.strokeRect(fL, doorY, sideWallW + 2, doorH);
 
-    // Centre panel line
-    ctx.strokeStyle = 'rgba(139,105,20,0.4)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    ctx.moveTo(doorX + doorW / 2, doorY + doorH * 0.08);
-    ctx.lineTo(doorX + doorW / 2, doorY + doorH * 0.92);
-    ctx.stroke();
-
-    // Gold knob
+    // Gold door knob (positioned proportionally within door frame)
     ctx.fillStyle   = '#FFD700';
     ctx.strokeStyle = '#B8960C';
     ctx.lineWidth   = 1;
     ctx.beginPath();
-    ctx.arc(doorX + doorW * 0.72, doorY + doorH * 0.55, 3, 0, Math.PI * 2);
+    ctx.arc(fL + sideWallW * 0.7, doorCY, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // "入口 ➡" label below door
-    const fontSize = Math.max(8, H * 0.018);
+    // "入口" label outside to the left
+    const fontSize = Math.max(8, H * 0.016);
     ctx.font      = `bold ${fontSize}px 'Comic Sans MS', cursive`;
     ctx.fillStyle = '#5C3317';
     ctx.textAlign = 'center';
-    ctx.fillText('入口 ➡', doorX + doorW / 2, originY + fontSize + 2);
+    ctx.fillText('入口', fL - fontSize * 0.5, doorCY + fontSize * 0.4);
 
     ctx.restore();
   }
 
-  // ─── D. Counter ─────────────────────────────────────────────────────────────
+  // ─── F. Counter (back wall, right portion) ──────────────────────────────────
 
-  _drawCounter(ctx, W, H, originX, originY, wallH) {
+  _drawCounter(ctx, W, H, fL, fT, fR, backWallH) {
     ctx.save();
 
-    const rightW   = W - originX;
-    const counterW = Math.max(50, rightW * 0.42);
-    const counterH = wallH * 0.58;
-    const topH     = wallH * 0.08;
-    const counterX = originX + rightW * 0.28;
-    const counterY = originY - counterH;
+    const wallMidX  = fL + (fR - fL) * 0.52;
+    const counterW  = Math.max(50, (fR - wallMidX) * 0.62);
+    const counterH  = Math.max(14, backWallH * 0.55);
+    const counterX  = wallMidX + (fR - wallMidX) * 0.10;
+    const counterY  = fT - counterH;
 
-    // Counter body
+    // Counter surface (top-down: rectangle)
     ctx.fillStyle   = '#7B4F2E';
-    ctx.fillRect(counterX, counterY, counterW, counterH);
     ctx.strokeStyle = '#4A2E0E';
     ctx.lineWidth   = 2;
+    ctx.fillRect(counterX, counterY, counterW, counterH);
     ctx.strokeRect(counterX, counterY, counterW, counterH);
 
-    // Top ledge
+    // Lighter top ledge strip
     ctx.fillStyle   = '#A07040';
-    ctx.fillRect(counterX, counterY - topH, counterW, topH);
+    ctx.fillRect(counterX, counterY, counterW, counterH * 0.25);
     ctx.strokeStyle = '#4A2E0E';
-    ctx.lineWidth   = 1.5;
-    ctx.strokeRect(counterX, counterY - topH, counterW, topH);
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(counterX, counterY, counterW, counterH * 0.25);
 
     // Label
-    const fontSize = Math.max(9, H * 0.022);
+    const fontSize = Math.max(9, H * 0.020);
     ctx.font      = `bold ${fontSize}px 'Comic Sans MS', cursive`;
     ctx.fillStyle = '#FFE0B2';
     ctx.textAlign = 'center';
-    ctx.fillText('☕ 吧台', counterX + counterW / 2, counterY + counterH * 0.62);
+    ctx.fillText('☕ 吧台', counterX + counterW / 2, counterY + counterH * 0.72);
 
-    // Coffee machine on top ledge
-    this._drawCoffeeMachine(ctx, counterX + counterW / 2, counterY - topH, H);
+    // Coffee machine (top-down circle representation)
+    this._drawCoffeeMachine(ctx, counterX + counterW / 2, counterY + counterH * 0.30, H);
 
     ctx.restore();
   }
 
   _drawCoffeeMachine(ctx, cx, cy, H) {
     const s  = Math.max(0.55, H / 960);
-    const mW = 34 * s;
-    const mH = 28 * s;
+    const mW = 30 * s;
+    const mH = 14 * s;
 
+    // Machine body (top-down rounded rect)
     ctx.fillStyle   = '#2C1A08';
     ctx.strokeStyle = '#1A0900';
     ctx.lineWidth   = 1.5;
-    _roundRect(ctx, cx - mW / 2, cy - mH, mW, mH, 4 * s);
+    _roundRect(ctx, cx - mW / 2, cy - mH / 2, mW, mH, 3 * s);
     ctx.fill();
     ctx.stroke();
 
+    // Red panel
     ctx.fillStyle   = '#C0392B';
     ctx.strokeStyle = '#922B21';
     ctx.lineWidth   = 1;
-    _roundRect(ctx, cx - mW * 0.44, cy - mH + 3 * s, mW * 0.88, mH * 0.36, 2 * s);
+    _roundRect(ctx, cx - mW * 0.40, cy - mH * 0.30, mW * 0.80, mH * 0.60, 2 * s);
     ctx.fill();
     ctx.stroke();
 
+    // Buttons (top-down)
     ctx.fillStyle   = '#2C3E50';
     ctx.strokeStyle = '#1A252F';
     ctx.lineWidth   = 0.8;
     for (let i = -1; i <= 1; i++) {
       ctx.beginPath();
-      ctx.arc(cx + i * 9 * s, cy - 4 * s, 2.5 * s, 0, Math.PI * 2);
+      ctx.arc(cx + i * 7 * s, cy, 2 * s, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = 'rgba(200,200,200,0.55)';
-    ctx.lineWidth   = 1.5;
-    for (let i = -1; i <= 1; i++) {
-      ctx.beginPath();
-      ctx.moveTo(cx + i * 5 * s, cy - mH);
-      ctx.quadraticCurveTo(cx + i * 5 * s + 3 * s, cy - mH - 6 * s, cx + i * 5 * s, cy - mH - 12 * s);
       ctx.stroke();
     }
   }
 
-  // ─── D. Windows ─────────────────────────────────────────────────────────────
+  // ─── F. Windows (back wall) ─────────────────────────────────────────────────
 
-  _drawWindows(ctx, W, H, originX, originY, wallH) {
+  _drawWindows(ctx, W, H, fL, fT, fR, backWallH) {
     ctx.save();
 
-    const winW = Math.max(36, W * 0.08);
-    const winH = wallH * 0.62;
-    const winY = originY - wallH * 0.92;
+    const winW  = Math.max(30, W * 0.075);
+    const winH  = Math.max(12, backWallH * 0.55);
+    const winY  = fT - backWallH * 0.85;
 
-    // Two windows — one on each side of the wall centre
-    const positions = [W * 0.28, W * 0.58];
+    // Two windows in the left half of the back wall
+    const positions = [
+      fL + (fR - fL) * 0.12,
+      fL + (fR - fL) * 0.30,
+    ];
 
     for (const wx of positions) {
       // Sky pane
       ctx.fillStyle   = '#87CEEB';
       ctx.strokeStyle = '#8B6914';
       ctx.lineWidth   = 2;
-      _roundRect(ctx, wx, winY, winW, winH, 4);
+      _roundRect(ctx, wx, winY, winW, winH, 3);
       ctx.fill();
       ctx.stroke();
 
@@ -342,76 +355,52 @@ export class CafeRenderer {
       ctx.lineTo(wx + winW,     winY + winH / 2);
       ctx.stroke();
 
-      // Left curtain
+      // Curtain strips (simplified for top-down scale)
       ctx.fillStyle = '#FF8FAB';
-      ctx.beginPath();
-      ctx.moveTo(wx - 3,     winY);
-      ctx.quadraticCurveTo(wx + 7,  winY + winH * 0.4, wx - 1,     winY + winH);
-      ctx.lineTo(wx + 9,             winY + winH);
-      ctx.quadraticCurveTo(wx + 10, winY + winH * 0.4, wx + 9,     winY);
-      ctx.closePath();
-      ctx.fill();
-
-      // Right curtain
-      ctx.beginPath();
-      ctx.moveTo(wx + winW + 3,      winY);
-      ctx.quadraticCurveTo(wx + winW - 7,  winY + winH * 0.4, wx + winW + 1,  winY + winH);
-      ctx.lineTo(wx + winW - 9,             winY + winH);
-      ctx.quadraticCurveTo(wx + winW - 10, winY + winH * 0.4, wx + winW - 9, winY);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillRect(wx - 3,         winY, 8, winH);
+      ctx.fillRect(wx + winW - 5,  winY, 8, winH);
     }
 
     ctx.restore();
   }
 
-  // ─── D. Plants ──────────────────────────────────────────────────────────────
+  // ─── G. Corner plants ───────────────────────────────────────────────────────
 
-  _drawPlants(ctx, H, originX, originY, tileW, tileH) {
+  _drawPlants(ctx, H, fL, fR, fT, fB) {
     const s = Math.max(0.6, H / 700);
+    const margin = Math.max(18, H * 0.03);
 
-    // Left-edge tile centre (6,0) and right-edge tile centre (0,6) of the floor
-    // With the +1 formula: cy = originY + (col + row + 1) * tileH/2
-    const leftX  = originX + (0 - 6) * tileW / 2;           // originX - 3*tileW
-    const leftY  = originY + (0 + 6 + 1) * tileH / 2;       // originY + 3.5*tileH
-
-    const rightX = originX + (6 - 0) * tileW / 2;           // originX + 3*tileW
-    const rightY = originY + (6 + 0 + 1) * tileH / 2;       // originY + 3.5*tileH
-
-    this._drawIsoPot(ctx, leftX,  leftY,  s);
-    this._drawIsoPot(ctx, rightX, rightY, s);
+    // Top-left and top-right corners of the floor
+    this._drawTopDownPot(ctx, fL + margin, fT + margin, s);
+    this._drawTopDownPot(ctx, fR - margin, fT + margin, s);
   }
 
-  _drawIsoPot(ctx, cx, cy, scale = 1) {
+  _drawTopDownPot(ctx, cx, cy, scale = 1) {
     const s = scale;
 
-    // Pot body
+    // Pot body (top-down circle)
     ctx.fillStyle   = '#8B5E3C';
     ctx.strokeStyle = '#4A2E0E';
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
-    ctx.moveTo(cx - 9 * s, cy - 8 * s);
-    ctx.lineTo(cx + 9 * s, cy - 8 * s);
-    ctx.lineTo(cx + 7 * s, cy + 4 * s);
-    ctx.lineTo(cx - 7 * s, cy + 4 * s);
-    ctx.closePath();
+    ctx.arc(cx, cy, 8 * s, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // Pot top ellipse
+    // Rim highlight
+    ctx.strokeStyle = '#A07040';
+    ctx.lineWidth   = 1;
     ctx.beginPath();
-    ctx.ellipse(cx, cy - 8 * s, 9 * s, 4.5 * s, 0, 0, Math.PI * 2);
-    ctx.fillStyle   = '#A07040';
-    ctx.fill();
-    ctx.strokeStyle = '#4A2E0E';
+    ctx.arc(cx, cy, 6 * s, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Leaves
+    // Leaves (seen from above — small circles radiating out)
     const leafData = [
-      [cx,         cy - 16 * s, 9 * s],
-      [cx - 7 * s, cy - 22 * s, 6 * s],
-      [cx + 7 * s, cy - 22 * s, 6 * s],
-      [cx,         cy - 27 * s, 6 * s],
+      [cx,         cy - 11 * s, 6 * s],
+      [cx - 9 * s, cy - 6 * s,  5 * s],
+      [cx + 9 * s, cy - 6 * s,  5 * s],
+      [cx - 7 * s, cy + 7 * s,  5 * s],
+      [cx + 7 * s, cy + 7 * s,  5 * s],
     ];
     ctx.fillStyle   = '#5DB85D';
     ctx.strokeStyle = '#3A7A3A';
