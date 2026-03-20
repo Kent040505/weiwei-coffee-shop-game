@@ -45,9 +45,10 @@ class Game {
     const W = this.W;
     const H = this.H;
 
+    // Top-down table positions — placed within the floor area (H*0.28 to H*0.90)
     this.tables = [
-      new Table(1, W * 0.30, H * 0.58, 'round2'),
-      new Table(2, W * 0.55, H * 0.62, 'square4'),
+      new Table(1, W * 0.28, H * 0.48, 'round2'),
+      new Table(2, W * 0.62, H * 0.58, 'square4'),
     ];
 
     this.economySystem    = new EconomySystem();
@@ -180,7 +181,7 @@ class Game {
 
     this.cafeRenderer.render(ctx, this.daySystem.getSkyTint());
 
-    // ── Depth-sorted rendering (painter's algorithm for isometric view) ────────
+    // ── Depth-sorted rendering (painter's algorithm — sort by y for top-down) ─
     const renderables = [
       ...this.tables.map((t) => ({ type: 'table', obj: t, sortY: t.y })),
       ...this.customerSystem.customers.map((c) => ({ type: 'customer', obj: c, sortY: c.y })),
@@ -410,9 +411,10 @@ class Game {
     const W = this.W;
     const H = this.H;
     const n = this.tables.length;
+    // Additional tables spread across the floor area (H*0.28 to H*0.90)
     const positions = [
-      [W * 0.42, H * 0.48],
-      [W * 0.68, H * 0.50],
+      [W * 0.45, H * 0.42],
+      [W * 0.72, H * 0.48],
     ];
     const pos = positions[n - 2] ?? [W * 0.50 + n * 30, H * 0.52];
     this.tables.push(new Table(n + 1, pos[0], pos[1], 'square4'));
@@ -484,12 +486,12 @@ class Game {
       this.customerSystem.canvasW = cssW;
       this.customerSystem.canvasH = cssH;
     }
-    // Reposition tables so they follow the new layout on orientation change
+    // Reposition tables to fit top-down floor area (H*0.28 to H*0.90)
     if (this.tables && this.tables.length >= 2) {
-      this.tables[0].x = cssW * 0.30;
-      this.tables[0].y = cssH * 0.58;
-      this.tables[1].x = cssW * 0.55;
-      this.tables[1].y = cssH * 0.62;
+      this.tables[0].x = cssW * 0.28;
+      this.tables[0].y = cssH * 0.48;
+      this.tables[1].x = cssW * 0.62;
+      this.tables[1].y = cssH * 0.58;
     }
   }
 

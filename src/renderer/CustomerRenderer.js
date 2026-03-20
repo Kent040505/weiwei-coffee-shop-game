@@ -1,15 +1,11 @@
 /**
- * CustomerRenderer.js — Isometric 2.5D Chibi Style
+ * CustomerRenderer.js — Top-Down 2D Chibi Style (Stardew-like)
  *
- * Draws customers as small isometric chibi characters.
- *
- * Coordinate transform (same perspective squish as TableRenderer):
- *   sx = customer.x
- *   sy = customer.y * 0.55 + canvasH * 0.22
+ * Draws customers as small top-down chibi characters.
+ * No perspective squish — entity coordinates are used directly as screen coords.
  *
  * Walk-in animation (state === 'WALKING_IN'):
- *   - Vertical bounce on body: Math.sin(Date.now() * 0.008) * 3
- *   - Two small footstep ellipses below feet
+ *   - Subtle side-to-side bob: Math.sin(Date.now() * 0.008) * 2
  *
  * All existing features preserved:
  *   name tag, patience bar, streamer sparkles, crown/phone emoji, '!' indicator
@@ -25,79 +21,68 @@ export class CustomerRenderer {
    * @param {number} [canvasH=640]
    */
   render(ctx, customer, canvasW = 360, canvasH = 640) {
+    // Top-down: use entity coords directly (no perspective squish)
     const sx = customer.x;
-    const sy = customer.y * 0.55 + canvasH * 0.22;
+    const sy = customer.y;
 
     const { color, name, isStreamer, isSpecial, emoji, sparkleTimer, state } = customer;
 
     // Responsive radii
-    const bodyR = Math.max(12, canvasW * 0.042);
-    const headR = Math.max(9,  canvasW * 0.032);
+    const bodyR = Math.max(12, canvasW * 0.040);
+    const headR = Math.max(8,  canvasW * 0.028);
 
-    // Walking bounce offset
-    const isWalking  = state === 'WALKING_IN';
-    const walkBounce = isWalking ? Math.sin(Date.now() * 0.008) * 3 : 0;
+    // Subtle walking bob (side-to-side in top-down)
+    const isWalking = state === 'WALKING_IN';
+    const walkBob   = isWalking ? Math.sin(Date.now() * 0.008) * 2 : 0;
 
     ctx.save();
 
-    // ── Shadow (isometric floor shadow) ──────────────────────────────────────
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    // ── Shadow (flat circle shadow below character) ────────────────────────────
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + bodyR * 1.05, bodyR * 0.78, bodyR * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx + 2, sy + bodyR * 0.55, bodyR * 0.72, bodyR * 0.22, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // ── Footsteps (walk animation) ────────────────────────────────────────────
+    // ── Footstep dots (walk animation) ───────────────────────────────────────
     if (isWalking) {
       const phase  = Date.now() * 0.006;
       const foot1A = Math.abs(Math.sin(phase));
       const foot2A = Math.abs(Math.sin(phase + Math.PI));
-      ctx.fillStyle = `rgba(80,50,20,${0.25 * foot1A})`;
+      ctx.fillStyle = `rgba(80,50,20,${0.22 * foot1A})`;
       ctx.beginPath();
-      ctx.ellipse(sx - bodyR * 0.30, sy + bodyR * 1.10, bodyR * 0.22, bodyR * 0.10, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx - bodyR * 0.32 + walkBob, sy + bodyR * 0.52, bodyR * 0.18, bodyR * 0.10, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = `rgba(80,50,20,${0.25 * foot2A})`;
+      ctx.fillStyle = `rgba(80,50,20,${0.22 * foot2A})`;
       ctx.beginPath();
-      ctx.ellipse(sx + bodyR * 0.30, sy + bodyR * 1.10, bodyR * 0.22, bodyR * 0.10, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx + bodyR * 0.32 + walkBob, sy + bodyR * 0.52, bodyR * 0.18, bodyR * 0.10, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // ── Golden glow for streamers ─────────────────────────────────────────────
     if (isStreamer && sparkleTimer > 0) {
-      this._drawSparkles(ctx, sx, sy + walkBounce, sparkleTimer, bodyR);
+      this._drawSparkles(ctx, sx + walkBob, sy, sparkleTimer, bodyR);
     }
     if (isStreamer) {
       ctx.shadowColor = '#FFD700';
       ctx.shadowBlur  = 12;
     }
 
-    // ── Legs (two short lines) ────────────────────────────────────────────────
-    ctx.strokeStyle = this._darken(color);
-    ctx.lineWidth   = Math.max(2, bodyR * 0.18);
-    ctx.lineCap     = 'round';
-    for (const dx of [-bodyR * 0.28, bodyR * 0.28]) {
-      ctx.beginPath();
-      ctx.moveTo(sx + dx, sy + bodyR * 0.72 + walkBounce);
-      ctx.lineTo(sx + dx * 0.8, sy + bodyR + walkBounce);
-      ctx.stroke();
-    }
-    ctx.lineCap = 'butt';
-
-    // ── Body (slightly squished oval — isometric look) ────────────────────────
+    // ── Body (circle — top-down view) ─────────────────────────────────────────
     ctx.fillStyle   = color;
     ctx.strokeStyle = this._darken(color);
     ctx.lineWidth   = 2.5;
     ctx.beginPath();
-    ctx.ellipse(sx, sy + bodyR * 0.12 + walkBounce, bodyR, bodyR * 0.72, 0, 0, Math.PI * 2);
+    ctx.arc(sx + walkBob, sy, bodyR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // ── Head ──────────────────────────────────────────────────────────────────
+    // ── Head (smaller circle offset slightly north for top-down look) ─────────
     ctx.shadowBlur  = 0;
     ctx.fillStyle   = '#FFDBB5';
     ctx.strokeStyle = '#C49A6C';
     ctx.lineWidth   = 2;
     ctx.beginPath();
-    ctx.arc(sx, sy - headR * 0.78 + walkBounce, headR, 0, Math.PI * 2);
+    ctx.arc(sx + walkBob, sy - bodyR * 0.52, headR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
@@ -105,27 +90,27 @@ export class CustomerRenderer {
     const emojiFontSize = Math.max(10, canvasW * 0.017);
     ctx.font      = `${emojiFontSize}px serif`;
     ctx.textAlign = 'center';
-    ctx.fillText(emoji, sx, sy - headR * 0.78 + walkBounce + emojiFontSize * 0.38);
+    ctx.fillText(emoji, sx + walkBob, sy - bodyR * 0.52 + emojiFontSize * 0.38);
 
     // ── Crown for VIP / special ───────────────────────────────────────────────
     if (isSpecial && emoji === '👑') {
       ctx.font = `${emojiFontSize}px serif`;
-      ctx.fillText('👑', sx, sy - headR * 0.78 - headR + walkBounce);
+      ctx.fillText('👑', sx + walkBob, sy - bodyR * 0.52 - headR);
     }
 
     // ── Phone for streamers ───────────────────────────────────────────────────
     if (isStreamer) {
       ctx.font = `${emojiFontSize}px serif`;
-      ctx.fillText('📱', sx + bodyR + 4, sy - headR * 0.3 + walkBounce);
+      ctx.fillText('📱', sx + walkBob + bodyR + 4, sy - bodyR * 0.52 - headR * 0.3);
     }
 
     // ── Name tag ──────────────────────────────────────────────────────────────
     ctx.shadowBlur = 0;
-    this._drawNameTag(ctx, sx, sy + bodyR + 8 + walkBounce, customer.name, isStreamer, canvasW);
+    this._drawNameTag(ctx, sx + walkBob, sy + bodyR + 6, customer.name, isStreamer, canvasW);
 
     // ── Waiting indicator ─────────────────────────────────────────────────────
     if (state === 'WAITING') {
-      this._drawWaitingIndicator(ctx, sx, sy - headR * 0.78 - headR - 4 + walkBounce, customer, canvasW);
+      this._drawWaitingIndicator(ctx, sx + walkBob, sy - bodyR * 0.52 - headR - 4, customer, canvasW);
     }
 
     ctx.restore();
