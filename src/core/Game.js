@@ -432,13 +432,14 @@ class Game {
   }
 
   _addTable() {
+    const tableCount = this.tables.length;
     // Pre-defined tile positions for additional tables.
     // Lower-area positions mirror the upper starting tables for a balanced layout.
     const extraTiles = [
       { tx: 3, ty: 6 }, // lower-left area
       { tx: 9, ty: 6 }, // lower-right area
     ];
-    const tile = extraTiles[n - 2] ?? { tx: 5 + (n - 4) * 3, ty: 5 };
+    const tile = extraTiles[tableCount - 2] ?? { tx: 5 + (tableCount - 4) * 3, ty: 5 };
     this._tableTiles.push(tile);
 
     const pos = this.tileMap
@@ -446,7 +447,7 @@ class Game {
       : { x: this.W * 0.50, y: this.H * 0.52 };
 
     this.tables.push(new Table(
-      n + 1, pos.x, pos.y, 'square4',
+      tableCount + 1, pos.x, pos.y, 'square4',
       this.tileMap?.tileW ?? 64, this.tileMap?.tileH ?? 64,
     ));
     this.customerSystem.tables = this.tables;

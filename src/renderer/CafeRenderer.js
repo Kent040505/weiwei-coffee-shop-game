@@ -124,7 +124,8 @@ export class CafeRenderer {
     const shadowW = Math.max(2, tw * 0.12);
     const shadowH = Math.max(2, th * 0.12);
 
-    // South-facing wall edge (wall above floor)
+    // North wall shadow: cast on the south edge of this wall tile when the tile
+    // directly below is walkable floor (wall faces the interior from above).
     if (row + 1 < ROWS) {
       const below = tm.layout[row + 1][col];
       if (below === TILE.FLOOR || below === TILE.TABLE || below === TILE.DOOR) {
@@ -132,7 +133,8 @@ export class CafeRenderer {
         ctx.fillRect(px, py + th - shadowH, tw, shadowH);
       }
     }
-    // East-facing wall edge (wall left of floor)
+    // West wall shadow: cast on the east edge of this wall tile when the tile
+    // to the right is walkable interior space (wall faces the interior from left).
     if (col + 1 < COLS) {
       const right = tm.layout[row][col + 1];
       if (right === TILE.FLOOR || right === TILE.TABLE || right === TILE.DOOR || right === TILE.COUNTER) {
