@@ -26,21 +26,19 @@ export class Customer {
     this.name        = options.name        ?? '客人';
     this.color       = options.color       ?? '#FFB3BA';
     this.emoji       = options.emoji       ?? '😊';
-    this.isStreamer  = options.isStreamer   ?? false;
+    this.isStreamer  = options.isStreamer  ?? false;
     this.isSpecial   = options.isSpecial   ?? false;
     this.tip         = options.tip         ?? 0;
     this.quotes      = options.quotes      ?? [];
     this.platform    = options.platform    ?? '';
     this.groupId     = options.groupId     ?? null;
 
-    // Special type flags
-    this.isBirthday  = options.isBirthday  ?? false;
-    this.isBlogger   = options.isBlogger   ?? false;
-    this.isFamily    = options.isFamily    ?? false;
+    this.isBirthday   = options.isBirthday   ?? false;
+    this.isBlogger    = options.isBlogger    ?? false;
+    this.isFamily     = options.isFamily     ?? false;
     this.angryPenalty = options.angryPenalty ?? 0;
     this.requiresItem = options.requiresItem ?? null;
 
-    // Position / movement
     this.x           = -30;
     this.y           = 300;
     this.targetX     = -30;
@@ -48,39 +46,30 @@ export class Customer {
     this.walkSpeed   = 120;
     this.canvasWidth = options.canvasWidth ?? 1280;
 
-    // State machine
+    this.facing = 'south';
+    this.isMoving = false;
+
     this.state       = STATE.WALKING_IN;
     this.stateTimer  = 0;
 
-    // Table assignment
     this.assignedTable = null;
     this.assignedSeat  = -1;
 
-    // Order
     this.order = null;
-
-    // Patience
     this.patience = 60;
-
-    // Money
     this.money = 0;
 
-    // Chat bubble
     this.chatMessage = null;
     this.chatTimer   = 0;
 
-    this._quoteTimer = 3;
+    this._quoteTimer  = 3;
     this.sparkleTimer = 0;
-    this._angryShown = false;
+    this._angryShown  = false;
 
-    // Star rating tracking
     this.earnedStars = 0;
     this.waitRatio   = 0;
 
-    // Sound effect hook — set by CustomerSystem
     this.onSound = null;
-
-    // Reputation tip multiplier — set by CustomerSystem
     this.tipMultiplier = 1.0;
   }
 
@@ -102,10 +91,11 @@ export class Customer {
       if (this.chatTimer <= 0) this.chatMessage = null;
     }
 
-    if (this.sparkleTimer > 0) this.sparkleTimer -= dt;
+    if (this.sparkleTimer > 0) {
+      this.sparkleTimer -= dt;
+    }
 
     switch (this.state) {
-
       case STATE.WALKING_IN:
         if (this._hasArrived()) {
           this._enterState(STATE.FINDING_TABLE, 1);
@@ -170,10 +160,9 @@ export class Customer {
           this.say('😤 等不及了！', 4);
         }
         if (this.stateTimer <= 0) {
-          // Angry leave
-          this.waitRatio  = 1.0;
+          this.waitRatio   = 1.0;
           this.earnedStars = 1;
-          this.money = 0;
+          this.money       = 0;
           if (this.assignedTable && this.assignedSeat >= 0) {
             this.assignedTable.vacate(this.assignedSeat);
           }
@@ -181,8 +170,7 @@ export class Customer {
           if (systems.reputationSystem) {
             systems.reputationSystem.onAngryLeave();
             if (this.isBlogger) {
-              systems.reputationSystem.reputation = Math.max(0,
-                systems.reputationSystem.reputation - (this.angryPenalty || 5));
+              systems.reputationSystem.reputation = Math.max(0, systems.reputationSystem.reputation - (this.angryPenalty || 5));
             }
           }
           if (systems.goalSystem) systems.goalSystem.onAngryLeave();
@@ -213,7 +201,6 @@ export class Customer {
           if (this.assignedTable && this.assignedSeat >= 0) {
             this.assignedTable.vacate(this.assignedSeat);
           }
-          // Notify systems
           if (systems.reputationSystem) {
             systems.reputationSystem.addRating(this.earnedStars);
           }
@@ -246,15 +233,27 @@ export class Customer {
     const dx   = this.targetX - this.x;
     const dy   = this.targetY - this.y;
     const dist = Math.hypot(dx, dy);
+
+    this.isMoving = dist >= 1;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      this.facing = dx >= 0 ? 'east' : 'west';
+    } else if (Math.abs(dy) > 0.5) {
+      this.facing = dy >= 0 ? 'south' : 'north';
+    }
+
     if (dist < 1) {
       this.x = this.targetX;
       this.y = this.targetY;
+      this.isMoving = false;
       return;
     }
+
     const step = this.walkSpeed * dt;
     if (step >= dist) {
       this.x = this.targetX;
       this.y = this.targetY;
+      this.isMoving = false;
     } else {
       this.x += (dx / dist) * step;
       this.y += (dy / dist) * step;
@@ -274,7 +273,7 @@ export class Customer {
 
   receiveOrder() {
     if (this.state !== STATE.WAITING) return;
-    // Calculate star rating based on wait ratio
+
     const timeUsed = this.patience - this.stateTimer;
     this.waitRatio = Math.max(0, Math.min(1, timeUsed / this.patience));
     if (this.waitRatio < 0.2)      this.earnedStars = 5;
